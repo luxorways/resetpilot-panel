@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ResetPilot — Control Panel</title>
+<style>
+  :root{--sage:#5F7161;--dark:#4A5D4C;--bg:#F7F7F2;--card:#ffffff;--line:#E7E7DF;--txt:#2b2b2b}
+  *{box-sizing:border-box} body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--txt)}
+  .wrap{max-width:640px;margin:0 auto;padding:22px 16px 48px}
+  header{display:flex;align-items:center;gap:12px;margin:8px 0 18px}
+  .logo{width:46px;height:46px;border-radius:50%;background:var(--sage);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px}
+  h1{font-size:21px;margin:0} .sub{color:#777;font-size:13px;margin-top:2px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:16px}
+  .card h2{font-size:15px;margin:0 0 12px;color:var(--dark)}
+  label{font-size:13px;color:#666;display:block;margin-bottom:6px}
+  input[type=text],input[type=password]{width:100%;padding:12px;border:1px solid var(--line);border-radius:10px;font-size:15px;background:#fff}
+  .modes{display:flex;gap:10px;margin:14px 0}
+  .mode{flex:1;padding:12px;border:1.5px solid var(--line);border-radius:10px;background:#fff;font-size:15px;cursor:pointer;text-align:center}
+  .mode.on{border-color:var(--sage);background:#EFF3EE;font-weight:600;color:var(--dark)}
+  .go{width:100%;padding:14px;border:0;border-radius:10px;background:var(--sage);color:#fff;font-size:16px;font-weight:600;cursor:pointer}
+  .go:disabled{opacity:.55}
+  .note{font-size:12.5px;color:#888;margin-top:10px;line-height:1.5}
+  .row{display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid var(--line);font-size:14px}
+  .row:last-child{border-bottom:0}
+  .pill{font-size:11.5px;padding:2.5px 9px;border-radius:99px;background:#EFF3EE;color:var(--dark);white-space:nowrap}
+  .pill.run{background:#FFF4DE;color:#8a6d1a}.pill.fail{background:#FDECEC;color:#9c2b2b}
+  a{color:var(--dark)}
+  #msg{font-size:14px;margin-top:12px;min-height:20px}
+  .hidden{display:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo">RP</div>
+    <div><h1>ResetPilot</h1><div class="sub">The Daily Home Reset — Control Panel</div></div>
+  </header>
+
+  <div class="card" id="lockCard">
+    <h2>Panel Chabi (GitHub Token)</h2>
+    <label>Pehli dafa apna GitHub token dalo — ye sirf tumhare is browser me save rahega, kahin aur nahi jayega</label>
+    <input type="password" id="pw" placeholder="GitHub token (github_pat_...)">
+    <div style="height:10px"></div>
+    <button class="go" id="savePw">Save &amp; Open Panel</button>
+    <div id="lockMsg"></div>
+  </div>
+
+  <div id="panel" class="hidden">
+    <div class="card">
+      <h2>Nayi Post</h2>
+      <label>Post ka title / topic</label>
+      <input type="text" id="title" placeholder="Masalan: How to Clean a Kitchen in 20 Minutes">
+      <div class="note">Title khaali chhoro ge to tool topic bank se khud chun lega.</div>
+      <div class="modes">
+        <button class="mode on" id="mDraft" type="button">📝 Draft</button>
+        <button class="mode" id="mLive" type="button">🚀 Publish</button>
+      </div>
+      <button class="go" id="create">Post Banao</button>
+      <div id="msg"></div>
+      <div class="note">Post banne me aam tor par 2–8 minute lagte hain (Gemini busy ho to zyada). Roz zyada se zyada 2 posts (safety limit). Draft wali post Blogger &gt; Posts &gt; Drafts me milegi.</div>
+    </div>
+
+    <div class="card">
+      <h2>Taaza Halat (Runs)</h2>
+      <div id="runs">Loading...</div>
+    </div>
+
+    <div class="card">
+      <h2>Post History</h2>
+      <div id="history">Loading...</div>
+    </div>
+  </div>
+</div>
+<script>
+let mode = "draft";
+const $ = id => document.getElementById(id);
+const key = () => localStorage.getItem("rp_key") || "";
+
+const API = "https://api.github.com/repos/luxorways/resetpilot";
+function headers(){ return {"Content-Type":"application/json","Accept":"application/vnd.github+json","Authorization":"Bearer " + key()}; }
+
+async function loadStatus(){
+  try{
+    const r = await fetch(API + "/actions/workflows/resetpilot.yml/runs?per_page=5", {headers: headers()});
+    if(r.status === 401 || r.status === 403){ $("panel").classList.add("hidden"); $("lockCard").classList.remove("hidden"); return; }
+    const d = await r.json();
+    const runs = d.workflow_runs || [];
+    $("runs").innerHTML = runs.length ? runs.map(w=>{
+      const st = w.conclusion ? w.conclusion : w.status;
+      const cls = st==="success" ? "" : (st==="failure" ? "fail" : "run");
+      const label = st==="success" ? "✔ Ho gaya" : st==="failure" ? "✖ Fail" : "⏳ Chal raha hai";
+      return '<div class="row"><span>'+new Date(w.created_at).toLocaleString()+'</span><a href="'+w.html_url+'" target="_blank"><span class="pill '+cls+'">'+label+'</span></a></div>';
+    }).join("") : "Abhi koi run nahi.";
+    let posts = [];
+    const sr = await fetch(API + "/contents/state.json", {headers: {...headers(), "Accept":"application/vnd.github.raw+json"}});
+    if(sr.ok){ try { posts = (await sr.json()).posts || []; } catch(e){} }
+    posts = posts.slice().reverse();
+    $("history").innerHTML = posts.length ? posts.map(p=>'<div class="row"><span>'+p.title+'</span><span class="pill">'+p.date+'</span></div>').join("") : "Abhi koi post nahi bani.";
+  }catch(e){ }
+}
+
+$("mDraft").onclick = ()=>{ mode="draft"; $("mDraft").classList.add("on"); $("mLive").classList.remove("on"); };
+$("mLive").onclick = ()=>{ mode="live"; $("mLive").classList.add("on"); $("mDraft").classList.remove("on"); };
+
+$("savePw").onclick = async ()=>{
+  localStorage.setItem("rp_key", $("pw").value);
+  const r = await fetch(API + "/actions/workflows/resetpilot.yml/runs?per_page=1", {headers: headers()});
+  if(r.ok){ $("lockCard").classList.add("hidden"); $("panel").classList.remove("hidden"); loadStatus(); }
+  else { $("lockMsg").textContent = "Token ghalat lag raha hai — dobara dekho."; }
+};
+
+$("create").onclick = async ()=>{
+  const btn = $("create"); btn.disabled = true;
+  $("msg").textContent = "Run shuru kar raha hun...";
+  try{
+    const r = await fetch(API + "/actions/workflows/resetpilot.yml/dispatches", {method:"POST", headers: headers(), body: JSON.stringify({ref:"main", inputs:{title: $("title").value.trim(), mode}})});
+    if(r.status === 204){ $("msg").textContent = "✔ Run shuru ho gaya! Post ban rahi hai — neeche 'Taaza Halat' me nazar rakho, 2–8 minute me draft/post tayyar hogi."; setTimeout(loadStatus, 6000); }
+    else { const t = await r.text(); $("msg").textContent = "Masla: GitHub " + r.status + " " + t.slice(0,120); }
+  }catch(e){ $("msg").textContent = "Network masla — dobara koshish karo."; }
+  btn.disabled = false;
+};
+
+if(key()){ $("lockCard").classList.add("hidden"); $("panel").classList.remove("hidden"); loadStatus(); }
+setInterval(()=>{ if(key() && !$("panel").classList.contains("hidden")) loadStatus(); }, 30000);
+</script>
+</body>
+</html>
