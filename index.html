@@ -104,10 +104,10 @@ $("mDraft").onclick = ()=>{ mode="draft"; $("mDraft").classList.add("on"); $("mL
 $("mLive").onclick = ()=>{ mode="live"; $("mLive").classList.add("on"); $("mDraft").classList.remove("on"); };
 
 $("savePw").onclick = async ()=>{
-  localStorage.setItem("rp_key", $("pw").value);
+  localStorage.setItem("rp_key", $("pw").value.replace(/\s+/g, ""));
   const r = await fetch(API + "/actions/workflows/resetpilot.yml/runs?per_page=1", {headers: headers()});
   if(r.ok){ $("lockCard").classList.add("hidden"); $("panel").classList.remove("hidden"); loadStatus(); }
-  else { $("lockMsg").textContent = "Token ghalat lag raha hai — dobara dekho."; }
+  else { $("lockMsg").textContent = "Token ghalat lag raha hai (GitHub code: " + r.status + ") — naya token copy karke dobara dekho."; }
 };
 
 $("create").onclick = async ()=>{
